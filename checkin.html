@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>東華休閒運動社 - 社員自助簽到</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+TC:wght@300;400;500;700&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    :root {
+      --primary-color: #0f3b68;
+      --primary-light: #e0e7ff;
+      --success-color: #10b981;
+      --warning-color: #f59e0b;
+      --danger-color: #ef4444;
+      --bg-gradient: linear-gradient(135deg, #0f3b68 0%, #1e1b4b 100%);
+      --radius: 16px;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Inter', 'Noto Sans TC', sans-serif;
+      background-color: #f3f4f6;
+      color: #1f2937;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 600px;
+      background: #ffffff;
+      border-radius: var(--radius);
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
+      overflow: hidden;
+      margin-top: 20px;
+    }
+
+    header {
+      background: var(--bg-gradient);
+      color: #ffffff;
+      padding: 30px 20px;
+      text-align: center;
+      position: relative;
+    }
+
+    header h1 {
+      font-size: 1.6rem;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+
+    header p {
+      font-size: 0.9rem;
+      opacity: 0.8;
+    }
+
+    .cloud-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 12px;
+      border-radius: 50px;
+      background: rgba(255, 255, 255, 0.15);
+      font-size: 0.75rem;
+      margin-top: 10px;
+      backdrop-filter: blur(4px);
+    }
+
+    .cloud-status.connected {
+      color: #34d399;
+      background: rgba(52, 211, 153, 0.15);
+    }
+
+    .cloud-status.offline {
+      color: #9ca3af;
+      background: rgba(156, 163, 175, 0.15);
+    }
+
+    .cloud-status.error {
+      color: #fca5a5;
+      background: rgba(252, 165, 165, 0.15);
+    }
+
+    .content {
+      padding: 24px;
+    }
+
+    /* Tablet Mode (List Mode) */
+    .tablet-view {
+      display: block;
+    }
+
+    .search-box {
+      position: relative;
+      margin-bottom: 20px;
+    }
+
+    .search-box input {
+      width: 100%;
+      padding: 12px 16px 12px 42px;
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      font-size: 1rem;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .search-box input:focus {
+      border-color: var(--primary-color);
+      box-shadow: 0 0 0 3px rgba(15, 59, 104, 0.15);
+    }
+
+    .search-icon {
+      position: absolute;
+      left: 14px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: #9ca3af;
+      width: 20px;
+      height: 20px;
+    }
+
+    .member-list {
+      list-style: none;
+      max-height: 450px;
+      overflow-y: auto;
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+    }
+
+    .member-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 14px 20px;
+      border-bottom: 1px solid #e5e7eb;
+      transition: background-color 0.2s;
+    }
+
+    .member-item:last-child {
+      border-bottom: none;
+    }
+
+    .member-item:hover {
+      background-color: #f9fafb;
+    }
+
+    .member-name {
+      font-weight: 600;
+      font-size: 1.05rem;
+    }
+
+    .member-sub {
+      font-size: 0.8rem;
+      color: #6b7280;
+      margin-top: 2px;
+    }
+
+    .btn {
+      padding: 8px 16px;
+      font-weight: 600;
+      border-radius: 8px;
+      border: 1px solid transparent;
+      cursor: pointer;
+      font-size: 0.9rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: background-color 0.2s, color 0.2s;
+    }
+
+    .btn-primary {
+      background-color: var(--primary-color);
+      color: #ffffff;
+    }
+
+    .btn-primary:hover {
+      background-color: #0c2f53;
+    }
+
+    .btn-success {
+      background-color: var(--success-color);
+      color: #ffffff;
+      cursor: default;
+    }
+
+    /* Mobile Mode (QR Code scan page input ID) */
+    .mobile-view {
+      display: none;
+      text-align: center;
+    }
+
+    .form-group {
+      margin-bottom: 20px;
+      text-align: left;
+    }
+
+    .form-group label {
+      display: block;
+      font-weight: 600;
+      margin-bottom: 8px;
+      font-size: 0.95rem;
+    }
+
+    .form-input {
+      width: 100%;
+      padding: 14px;
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      font-size: 1.2rem;
+      text-align: center;
+      letter-spacing: 2px;
+      outline: none;
+    }
+
+    .form-input:focus {
+      border-color: var(--primary-color);
+    }
+
+    .btn-large {
+      width: 100%;
+      padding: 14px;
+      font-size: 1.1rem;
+      border-radius: 10px;
+      justify-content: center;
+    }
+
+    /* Success Overlay Modal */
+    .overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.8);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 100;
+      backdrop-filter: blur(5px);
+      transition: opacity 0.3s;
+    }
+
+    .overlay.hidden {
+      display: none;
+    }
+
+    .success-card {
+      background: #ffffff;
+      width: 90%;
+      max-width: 400px;
+      border-radius: var(--radius);
+      padding: 30px;
+      text-align: center;
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2);
+      animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+
+    @keyframes popIn {
+      0% { transform: scale(0.8); opacity: 0; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+
+    .success-icon {
+      width: 70px;
+      height: 70px;
+      background-color: rgba(16, 185, 129, 0.1);
+      color: var(--success-color);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 20px auto;
+    }
+
+    .success-title {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: #111827;
+      margin-bottom: 10px;
+    }
+
+    .success-name {
+      font-size: 1.2rem;
+      font-weight: 600;
+      color: var(--primary-color);
+      margin-bottom: 15px;
+    }
+
+    .fee-notice {
+      padding: 12px;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      margin-bottom: 20px;
+      font-weight: 500;
+    }
+
+    .fee-notice.unpaid {
+      background-color: rgba(245, 158, 11, 0.1);
+      color: #d97706;
+      border: 1px solid rgba(245, 158, 11, 0.2);
+    }
+
+    .fee-notice.paid {
+      background-color: rgba(16, 185, 129, 0.1);
+      color: #059669;
+      border: 1px solid rgba(16, 185, 129, 0.2);
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 40px 20px;
+      color: #9ca3af;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <header>
+      <h1 id="header-title">東華休閒運動社</h1>
+      <p id="header-subtitle">課堂自助簽到系統</p>
+      <div id="cloud-status" class="cloud-status">
+        <i data-lucide="loader"></i> 讀取資料中...
+      </div>
+    </header>
+
+    <div class="content">
+      <!-- Tablet Mode (Member list buttons) -->
+      <div id="tablet-view" class="tablet-view">
+        <div class="search-box">
+          <i data-lucide="search" class="search-icon"></i>
+          <input type="text" id="tablet-search" placeholder="輸入姓名或學號搜尋...">
+        </div>
+        <ul id="member-list" class="member-list">
+          <li class="empty-state">載入社員資料中，請稍候...</li>
+        </ul>
+      </div>
+
+      <!-- Mobile Mode (QR Code scan page input ID) -->
+      <div id="mobile-view" class="mobile-view">
+        <form id="mobile-form">
+          <div class="form-group">
+            <label for="input-student-id">請輸入您的 學號 或 姓名：</label>
+            <input type="text" id="input-student-id" required class="form-input" placeholder="例如：411012345" autocomplete="off">
+          </div>
+          <button type="submit" id="btn-submit-mobile" class="btn btn-primary btn-large w-full">
+            <i data-lucide="check-circle-2"></i> 確認簽到
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Success Notification Modal -->
+  <div id="success-overlay" class="overlay hidden">
+    <div class="success-card">
+      <div class="success-icon">
+        <i data-lucide="check" style="width: 38px; height: 38px;"></i>
+      </div>
+      <div class="success-title">簽到成功！</div>
+      <div id="success-name" class="success-name">王小明</div>
+      <div id="success-notice" class="fee-notice unpaid">
+        單堂社費 $50 元，請向幹部付款並領取電子收據。
+      </div>
+      <button id="btn-success-close" class="btn btn-primary w-full" style="justify-content: center; padding: 12px;">
+        確定
+      </button>
+    </div>
+  </div>
+
+  <script>
+    // Configuration
+    let gasUrl = '';
+    let members = [];
+    let isMobile = false;
+
+    // DOM Elements
+    const cloudStatus = document.getElementById('cloud-status');
+    const memberList = document.getElementById('member-list');
+    const tabletSearch = document.getElementById('tablet-search');
+    const tabletView = document.getElementById('tablet-view');
+    const mobileView = document.getElementById('mobile-view');
+    const mobileForm = document.getElementById('mobile-form');
+    const inputStudentId = document.getElementById('input-student-id');
+    const successOverlay = document.getElementById('success-overlay');
+    const successName = document.getElementById('success-name');
+    const successNotice = document.getElementById('success-notice');
+    const btnSuccessClose = document.getElementById('btn-success-close');
+    const btnSubmitMobile = document.getElementById('btn-submit-mobile');
+
+    // Parse URL Query parameters
+    const urlParams = new URLSearchParams(window.location.search);
+    gasUrl = urlParams.get('gas') || localStorage.getItem('club_gas_url') || '';
+    const mode = urlParams.get('mode');
+    if (mode === 'mobile') {
+      isMobile = true;
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      lucide.createIcons();
+
+      // Show/Hide views based on mode
+      if (isMobile) {
+        tabletView.style.display = 'none';
+        mobileView.style.display = 'block';
+        document.getElementById('header-subtitle').textContent = '行動 QR 簽到';
+      } else {
+        tabletView.style.display = 'block';
+        mobileView.style.display = 'none';
+        tabletSearch.addEventListener('input', renderTabletList);
+      }
+
+      // Handlers
+      mobileForm.addEventListener('submit', handleMobileSubmit);
+      btnSuccessClose.addEventListener('click', () => successOverlay.classList.add('hidden'));
+
+      // Load Data
+      loadData();
+    });
+
+    async function loadData() {
+      // Fallback: Read LocalStorage first so it works offline/locally without GAS
+      const localMembers = JSON.parse(localStorage.getItem('club_members')) || [];
+      members = localMembers;
+
+      if (!gasUrl) {
+        updateCloudStatus('offline', '本地單機模式 (未同步試算表)');
+        renderTabletList();
+        return;
+      }
+
+      try {
+        updateCloudStatus('loading', '雲端資料庫連線中...');
+        const response = await fetch(`${gasUrl}?action=getData`);
+        const result = await response.json();
+        
+        if (result.status === 'success') {
+          members = result.members || [];
+          // Keep local storage up to date
+          localStorage.setItem('club_members', JSON.stringify(members));
+          updateCloudStatus('connected', '雲端同步中 (已連線)');
+          renderTabletList();
+        } else {
+          updateCloudStatus('error', '載入失敗，已載入本地備份');
+          renderTabletList();
+        }
+      } catch (err) {
+        console.error(err);
+        updateCloudStatus('error', '連線異常，已載入本地備份');
+        renderTabletList();
+      }
+    }
+
+    function updateCloudStatus(status, text) {
+      cloudStatus.className = 'cloud-status ' + status;
+      let icon = 'loader';
+      if (status === 'connected') icon = 'cloud-lightning';
+      if (status === 'offline') icon = 'monitor-off';
+      if (status === 'error') icon = 'alert-circle';
+      cloudStatus.innerHTML = `<i data-lucide="${icon}"></i> ${text}`;
+      lucide.createIcons();
+    }
+
+    function renderTabletList() {
+      if (isMobile) return;
+
+      memberList.innerHTML = '';
+      const q = tabletSearch.value.toLowerCase().trim();
+      const filtered = members.filter(m => m.name.toLowerCase().includes(q) || m.phone.toLowerCase().includes(q));
+
+      if (filtered.length === 0) {
+        memberList.innerHTML = '<li class="empty-state">找不到符合的社員。</li>';
+        return;
+      }
+
+      filtered.forEach(m => {
+        const li = document.createElement('li');
+        li.className = 'member-item';
+        
+        const planText = m.plan === 'unlimited' 
+          ? '<span style="color:#7e22ce; font-weight:600; font-size:0.8rem;">[上到飽方案]</span>' 
+          : '<span style="color:#4338ca; font-weight:600; font-size:0.8rem;">[單堂方案]</span>';
+
+        li.innerHTML = `
+          <div>
+            <div class="member-name">${m.name}</div>
+            <div class="member-sub">學號：${m.phone} | ${planText}</div>
+          </div>
+          <button class="btn btn-primary" onclick="performCheckin('${m.phone}')">
+            <i data-lucide="user-check"></i> 簽到
+          </button>
+        `;
+        memberList.appendChild(li);
+      });
+      lucide.createIcons();
+    }
+
+    // Perform Checkin request
+    async function performCheckin(studentId) {
+      // Find member locally first to show immediate popup
+      const member = members.find(m => m.phone === studentId || m.name === studentId);
+      
+      if (!member) {
+        alert('找不到該社員！請確認學號是否正確，或先在幹部後台註冊。');
+        return;
+      }
+
+      // Disable buttons temporarily
+      btnSubmitMobile.disabled = true;
+      const today = new Date().toLocaleDateString('zh-TW', { timeZone: 'Asia/Taipei', year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '-');
+
+      // Local Fallback writing: Make sure offline check-in works and updates LocalStorage!
+      try {
+        let localAttendance = JSON.parse(localStorage.getItem('club_attendance')) || {};
+        if (!localAttendance[today]) {
+          localAttendance[today] = {};
+        }
+        
+        // Mark checked in locally
+        const isUnlimitedPaid = member.plan === 'unlimited' && member.unlimitedPaid;
+        localAttendance[today][member.id] = {
+          present: true,
+          paid: isUnlimitedPaid,
+          receiptNo: isUnlimitedPaid ? member.unlimitedReceiptNo : ""
+        };
+        localStorage.setItem('club_attendance', JSON.stringify(localAttendance));
+      } catch (err) {
+        console.error("Local attendance save error:", err);
+      }
+
+      // Prepare UI Success card details
+      successName.textContent = member.name;
+      if (member.plan === 'unlimited') {
+        if (member.unlimitedPaid) {
+          successNotice.className = 'fee-notice paid';
+          successNotice.textContent = '您是上到飽方案（已付清），此堂課免繳費！祝上課愉快。';
+        } else {
+          successNotice.className = 'fee-notice unpaid';
+          successNotice.textContent = '提醒您：您選擇了「上到飽方案」，請向幹部補繳 $1000 元方案費。';
+        }
+      } else {
+        successNotice.className = 'fee-notice unpaid';
+        successNotice.textContent = '單堂社費 $50 元，請向幹部付款並領取收據。';
+      }
+      successOverlay.classList.remove('hidden');
+
+      // Trigger server push if GAS is connected
+      if (gasUrl) {
+        try {
+          updateCloudStatus('loading', '簽到登錄中...');
+          await fetch(gasUrl, {
+            method: 'POST',
+            mode: 'no-cors',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              action: 'checkin',
+              date: today,
+              studentId: studentId
+            })
+          });
+          updateCloudStatus('connected', '雲端同步中 (已連線)');
+        } catch (err) {
+          console.error("GAS push failed:", err);
+          updateCloudStatus('error', '雲端同步失敗，已儲存於本機');
+        }
+      }
+
+      inputStudentId.value = '';
+      btnSubmitMobile.disabled = false;
+      
+      // Reload list to refresh cache
+      setTimeout(loadData, 2000);
+    }
+
+    function handleMobileSubmit(e) {
+      e.preventDefault();
+      const val = inputStudentId.value.trim();
+      if (!val) return;
+      performCheckin(val);
+    }
+  </script>
+</body>
+</html>

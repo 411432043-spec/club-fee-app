@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>社團課堂簽到與自動收據系統</title>
+  <!-- Google Fonts: Outfit for numbers, Noto Sans TC for Chinese -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+TC:wght@300;400;500;700&display=swap" rel="stylesheet">
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="header-logo">
+        <i data-lucide="receipt" class="logo-icon"></i>
+        <h1>社團課收費管家</h1>
+        <span class="badge badge-outline" id="sync-status-indicator" style="margin-left: 10px; display: inline-flex; align-items: center; gap: 4px;">
+          <i data-lucide="cloud-off" style="width: 14px; height: 14px;"></i> 本地單機模式
+        </span>
+      </div>
+      <div class="header-actions">
+        <label for="class-date">選擇上課日期：</label>
+        <div class="date-picker-wrapper">
+          <input type="date" id="class-date" class="control-input">
+        </div>
+      </div>
+    </header>
+
+    <!-- Dashboard Stats Grid -->
+    <section class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-icon-wrapper blue">
+          <i data-lucide="users"></i>
+        </div>
+        <div class="stat-info">
+          <h3>今日出席人數</h3>
+          <p id="stat-attendance">0 人</p>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon-wrapper green">
+          <i data-lucide="dollar-sign"></i>
+        </div>
+        <div class="stat-info">
+          <h3>今日已收社費</h3>
+          <p id="stat-received">$0 TWD</p>
+        </div>
+      </div>
+      <div class="stat-card warning">
+        <div class="stat-icon-wrapper orange">
+          <i data-lucide="alert-circle"></i>
+        </div>
+        <div class="stat-info">
+          <h3>今日待收/漏收</h3>
+          <p id="stat-pending" class="highlight-warning">$0 TWD</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Main Workspace -->
+    <main class="main-layout">
+      <!-- Left Panel: Check-in and Outstanding list -->
+      <div class="layout-left">
+        <!-- Outstanding/Unpaid Warning Box -->
+        <section class="card unpaid-warning-card">
+          <div class="card-header">
+            <h2 class="card-title text-warning">
+              <i data-lucide="alert-triangle"></i>
+              未繳費追蹤 (漏收警示區)
+            </h2>
+            <span class="badge badge-warning" id="unpaid-badge-count">0 人未繳</span>
+          </div>
+          <div class="card-body">
+            <ul id="unpaid-list" class="unpaid-list-group">
+              <!-- JS-generated unpaid items -->
+              <li class="empty-state">目前無未繳費社員，太棒了！</li>
+            </ul>
+          </div>
+        </section>
+
+        <!-- Attendance Sheet -->
+        <section class="card">
+          <div class="card-header">
+            <h2 class="card-title">
+              <i data-lucide="check-square"></i>
+              課堂簽到與收費管理
+            </h2>
+            <div class="card-actions">
+              <button id="btn-check-all" class="btn btn-secondary btn-sm">全體簽到</button>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="search-box">
+              <i data-lucide="search" class="search-icon"></i>
+              <input type="text" id="member-search" placeholder="搜尋社員姓名...">
+            </div>
+            <div class="table-container">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>姓名</th>
+                    <th>簽到狀態</th>
+                    <th>繳費狀態 (一堂 $50)</th>
+                    <th>動作</th>
+                  </tr>
+                </thead>
+                <tbody id="attendance-table-body">
+                  <!-- JS-populated rows -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <!-- Right Panel: Member Management & Backup -->
+      <div class="layout-right">
+        <!-- Self Check-in Portal -->
+        <section class="card">
+          <div class="card-header">
+            <h2 class="card-title">
+              <i data-lucide="qr-code"></i>
+              社員自主簽到
+            </h2>
+          </div>
+          <div class="card-body action-grid" style="display:flex; flex-direction:column; gap:10px;">
+            <a href="checkin.html" target="_blank" class="btn btn-primary w-full">
+              <i data-lucide="tablet"></i> 開啟門口平板簽到頁面
+            </a>
+            <button id="btn-show-qr" class="btn btn-secondary w-full">
+              <i data-lucide="qr-code"></i> 顯示手機簽到 QR Code
+            </button>
+          </div>
+        </section>
+
+        <!-- Quick Add Member -->
+        <section class="card">
+          <div class="card-header">
+            <h2 class="card-title">
+              <i data-lucide="user-plus"></i>
+              新增社團成員
+            </h2>
+          </div>
+          <div class="card-body">
+            <form id="add-member-form" class="vertical-form">
+              <div class="form-group">
+                <label for="new-member-name">社員姓名</label>
+                <input type="text" id="new-member-name" required placeholder="例如：王小明" class="control-input">
+              </div>
+              <div class="form-group">
+                <label for="new-member-phone">學號 (選填)</label>
+                <input type="text" id="new-member-phone" placeholder="例如：411234567" class="control-input">
+              </div>
+              <div class="form-group">
+                <label for="new-member-plan">付費方案</label>
+                <select id="new-member-plan" class="control-input">
+                  <option value="single">單堂付費 (每堂 $50)</option>
+                  <option value="unlimited">上到飽方案 ($1000)</option>
+                </select>
+              </div>
+              <button type="submit" class="btn btn-primary w-full">
+                <i data-lucide="plus"></i> 新增社員
+              </button>
+            </form>
+          </div>
+        </section>
+
+        <!-- Member List / Manage -->
+        <section class="card">
+          <div class="card-header">
+            <h2 class="card-title">
+              <i data-lucide="users"></i>
+              社員名冊 (<span id="total-members-count">0</span>)
+            </h2>
+          </div>
+          <div class="card-body">
+            <div class="member-list-wrapper">
+              <ul id="member-list" class="member-compact-list">
+                <!-- JS-populated member management -->
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        <!-- Cloud Sync settings -->
+        <section class="card">
+          <div class="card-header">
+            <h2 class="card-title">
+              <i data-lucide="cloud"></i>
+              Google 雲端自動寄信設定
+            </h2>
+          </div>
+          <div class="card-body">
+            <div class="vertical-form">
+              <div class="form-group">
+                <label for="input-gas-url">Apps Script 網頁應用程式 URL</label>
+                <input type="text" id="input-gas-url" placeholder="貼上部署好的 Web App URL" class="control-input">
+              </div>
+              <button id="btn-save-gas" class="btn btn-primary w-full">儲存設定</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- Backup & Settings -->
+        <section class="card">
+          <div class="card-header">
+            <h2 class="card-title">
+              <i data-lucide="settings"></i>
+              資料備份與匯出
+            </h2>
+          </div>
+          <div class="card-body action-grid">
+            <button id="btn-export-csv" class="btn btn-secondary w-full">
+              <i data-lucide="download"></i> 匯出歷史收費報表 (CSV)
+            </button>
+            <button id="btn-export-backup" class="btn btn-secondary w-full">
+              <i data-lucide="database"></i> 備份完整資料 (JSON)
+            </button>
+            <div class="file-import-wrapper">
+              <button class="btn btn-outline w-full file-label">
+                <i data-lucide="upload"></i> 匯入備份資料
+                <input type="file" id="import-backup-file" accept=".json">
+              </button>
+            </div>
+            <button id="btn-clear-data" class="btn btn-danger w-full">
+              <i data-lucide="trash-2"></i> 重設所有資料
+            </button>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <!-- Receipt Preview Modal -->
+  <div id="receipt-modal" class="modal-overlay hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2><i data-lucide="file-text"></i> 電子收據預覽</h2>
+        <button id="btn-close-modal" class="btn-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <!-- Canvas representation of receipt for rendering/downloading -->
+        <div class="receipt-container-preview">
+          <canvas id="receipt-canvas" width="750" height="500"></canvas>
+        </div>
+        <div class="alert alert-info">
+          <i data-lucide="info"></i> 收據圖片已自動生成，您可以下載並傳送給社員。
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="btn-share-receipt" class="btn btn-primary">
+          <i data-lucide="share-2"></i> 分享收據 (LINE 等)
+        </button>
+        <button id="btn-download-receipt" class="btn btn-success">
+          <i data-lucide="download"></i> 下載圖片
+        </button>
+        <button id="btn-print-receipt" class="btn btn-secondary">
+          <i data-lucide="printer"></i> 列印
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- QR Code Modal -->
+  <div id="qr-modal" class="modal-overlay hidden">
+    <div class="modal-card" style="max-width: 420px; text-align: center;">
+      <div class="modal-header">
+        <h2><i data-lucide="qr-code"></i> 行動簽到 QR Code</h2>
+        <button id="btn-close-qr-modal" class="btn-close">&times;</button>
+      </div>
+      <div class="modal-body" style="gap: 15px; padding: 25px; align-items: center;">
+        <p style="font-size: 0.9rem; color: var(--text-medium); line-height: 1.5;">請社員用手機掃描下方 QR Code，即可輸入學號自主簽到！</p>
+        <div style="background: #fff; padding: 15px; border-radius: 8px; border: 1px solid var(--border-color); display: inline-block; box-shadow: var(--shadow-sm);">
+          <img id="qr-image" src="" alt="QR Code" style="width: 220px; height: 220px; display: block;">
+        </div>
+        <div style="font-size: 0.8rem; word-break: break-all; background: #f3f4f6; padding: 10px; border-radius: 6px; border: 1px solid var(--border-color); width: 100%; text-align: left;">
+          <b>簽到連結：</b><br>
+          <a id="qr-link-text" href="#" target="_blank" style="color: var(--primary-color); font-weight: 500;">載入中...</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
