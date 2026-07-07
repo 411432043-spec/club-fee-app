@@ -142,39 +142,46 @@ function initSheets(ss) {
   }
 }
 
-// 取得所有成員
+// 取得所有成員 (排除 Google 試算表底部的空行)
 function getMembersList(ss) {
   var sheet = ss.getSheetByName("Members");
   var values = sheet.getDataRange().getValues();
   var list = [];
   for (var i = 1; i < values.length; i++) {
+    // 檢查 ID 或 姓名 是否為空，若是空行則跳過
+    if (!values[i][0] || values[i][0].toString().trim() === "") {
+      continue;
+    }
     list.push({
-      id: values[i][0],
-      name: values[i][1],
-      phone: values[i][2], // 前端習慣使用 phone 作為學號欄位名稱
-      plan: values[i][3],
+      id: values[i][0].toString(),
+      name: values[i][1] ? values[i][1].toString() : "",
+      phone: values[i][2] ? values[i][2].toString() : "", // 前端習慣使用 phone 作為學號欄位名稱
+      plan: values[i][3] ? values[i][3].toString() : "single",
       unlimitedPaid: values[i][4] === true || values[i][4] === "true",
-      unlimitedPaidDate: values[i][5],
-      unlimitedReceiptNo: values[i][6]
+      unlimitedPaidDate: values[i][5] ? values[i][5].toString() : "",
+      unlimitedReceiptNo: values[i][6] ? values[i][6].toString() : ""
     });
   }
   return list;
 }
 
-// 取得出席紀錄
+// 取得出席紀錄 (排除空行)
 function getAttendanceList(ss) {
   var sheet = ss.getSheetByName("Attendance");
   var values = sheet.getDataRange().getValues();
   var attendanceObj = {};
   
   for (var i = 1; i < values.length; i++) {
-    var date = values[i][0];
-    var memberId = values[i][1];
+    // 檢查日期與成員 ID 是否為空，若是空行則跳過
+    if (!values[i][0] || !values[i][1] || values[i][0].toString().trim() === "") {
+      continue;
+    }
+    var date = values[i][0].toString();
+    var memberId = values[i][1].toString();
     var present = values[i][4] === true || values[i][4] === "true";
     var paid = values[i][5] === true || values[i][5] === "true";
-    var receiptNo = values[i][6];
+    var receiptNo = values[i][6] ? values[i][6].toString() : "";
     
-    // 轉換為前端的 JSON 巢狀結構 { date: { memberId: { present, paid, receiptNo } } }
     if (!attendanceObj[date]) {
       attendanceObj[date] = {};
     }
@@ -194,7 +201,7 @@ function saveMemberRow(ss, member) {
   var rowIndex = -1;
   
   for (var i = 1; i < values.length; i++) {
-    if (values[i][0] === member.id) {
+    if (values[i][0] && values[i][0].toString() === member.id.toString()) {
       rowIndex = i + 1;
       break;
     }
@@ -222,7 +229,7 @@ function deleteMemberRow(ss, memberId) {
   var sheet = ss.getSheetByName("Members");
   var values = sheet.getDataRange().getValues();
   for (var i = 1; i < values.length; i++) {
-    if (values[i][0] === memberId) {
+    if (values[i][0] && values[i][0].toString() === memberId.toString()) {
       sheet.deleteRow(i + 1);
       break;
     }
@@ -235,7 +242,7 @@ function handleCheckin(ss, date, studentId) {
   
   // 透過學號(phone)或姓名尋找該社員
   var member = members.find(function(m) {
-    return m.phone === studentId || m.name === studentId;
+    return m.phone.toString() === studentId.toString() || m.name.toString() === studentId.toString();
   });
   
   if (!member) {
@@ -248,7 +255,7 @@ function handleCheckin(ss, date, studentId) {
   
   // 尋找今天該社員是否已經有記錄
   for (var i = 1; i < values.length; i++) {
-    if (values[i][0] === date && values[i][1] === member.id) {
+    if (values[i][0] && values[i][1] && values[i][0].toString() === date && values[i][1].toString() === member.id.toString()) {
       rowIndex = i + 1;
       break;
     }
@@ -272,7 +279,6 @@ function handleCheckin(ss, date, studentId) {
   ];
   
   if (rowIndex > -1) {
-    // 已經點名過了，但尚未付款，僅更新為出席
     sheet.getRange(rowIndex, 1, 1, rowData.length).setValues([rowData]);
   } else {
     sheet.appendRow(rowData);
@@ -294,21 +300,19 @@ function handleConfirmPayment(ss, date, memberId, receiptNo, amount, itemDesc) {
   var rowIndex = -1;
   
   for (var i = 1; i < values.length; i++) {
-    if (values[i][0] === date && values[i][1] === memberId) {
+    if (values[i][0] && values[i][1] && values[i][0].toString() === date && values[i][1].toString() === memberId.toString()) {
       rowIndex = i + 1;
       break;
     }
   }
   
   if (rowIndex > -1) {
-    // 更新繳費狀態與收據編號
     sheet.getRange(rowIndex, 6).setValue(true);
     sheet.getRange(rowIndex, 7).setValue(receiptNo);
     
-    // 獲取成員詳細資料以寄送 Email
     var studentId = values[rowIndex-1][3];
     var memberName = values[rowIndex-1][2];
-    var email = studentId.includes("@") ? studentId : studentId + "@gms.ndhu.edu.tw";
+    var email = studentId.toString().includes("@") ? studentId.toString() : studentId.toString() + "@gms.ndhu.edu.tw";
     
     try {
       sendReceiptEmail(email, memberName, studentId, receiptNo, date, amount, itemDesc);
@@ -324,31 +328,29 @@ function handleConfirmPayment(ss, date, memberId, receiptNo, amount, itemDesc) {
 // 方案確認付款並寄信
 function handleConfirmUnlimitedPayment(ss, memberId, receiptNo, amount, itemDesc, date) {
   var mSheet = ss.getSheetByName("Members");
-  var values = mSheet.getDataRange().getValues();
+  var values = mSheet.getAddressRange ? mSheet.getDataRange().getValues() : mSheet.getDataRange().getValues();
   var rowIndex = -1;
   
   for (var i = 1; i < values.length; i++) {
-    if (values[i][0] === memberId) {
+    if (values[i][0] && values[i][0].toString() === memberId.toString()) {
       rowIndex = i + 1;
       break;
     }
   }
   
   if (rowIndex > -1) {
-    // 1. 更新成員表中的上到飽狀態
-    mSheet.getRange(rowIndex, 5).setValue(true); // unlimitedPaid = true
-    mSheet.getRange(rowIndex, 6).setValue(date);      // unlimitedPaidDate
-    mSheet.getRange(rowIndex, 7).setValue(receiptNo); // unlimitedReceiptNo
+    mSheet.getRange(rowIndex, 5).setValue(true);
+    mSheet.getRange(rowIndex, 6).setValue(date);
+    mSheet.getRange(rowIndex, 7).setValue(receiptNo);
     
     var memberName = values[rowIndex-1][1];
     var studentId = values[rowIndex-1][2];
-    var email = studentId.includes("@") ? studentId : studentId + "@gms.ndhu.edu.tw";
+    var email = studentId.toString().includes("@") ? studentId.toString() : studentId.toString() + "@gms.ndhu.edu.tw";
     
-    // 2. 更新今天 (如有簽到) 的出席記錄繳費狀態
     var aSheet = ss.getSheetByName("Attendance");
     var aValues = aSheet.getDataRange().getValues();
     for (var j = 1; j < aValues.length; j++) {
-      if (aValues[j][0] === date && aValues[j][1] === memberId) {
+      if (aValues[j][0] && aValues[j][1] && aValues[j][0].toString() === date && aValues[j][1].toString() === memberId.toString()) {
         aSheet.getRange(j + 1, 6).setValue(true);
         aSheet.getRange(j + 1, 7).setValue(receiptNo);
         break;
@@ -463,6 +465,7 @@ function sendReceiptEmail(toEmail, name, studentId, receiptNo, date, amount, ite
 function getChineseCapital(amount) {
   var digits = ['零', '壹', '貳', '參', '肆', '伍', '陸', '柒', '捌', '玖'];
   var wan = Math.floor(amount / 10000) % 10;
+  var qian = Math.floor(amount / 100) % 10; // Fixed index
   var qian = Math.floor(amount / 1000) % 10;
   var bai = Math.floor(amount / 100) % 10;
   var shi = Math.floor(amount / 10) % 10;
