@@ -16,12 +16,6 @@
 
 // 處理 GET 請求：用來獲取成員清單與簽到狀態
 function doGet(e) {
-  var corsHeaders = {
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type"
-  };
-
   try {
     var action = e.parameter.action;
     var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -39,35 +33,26 @@ function doGet(e) {
         members: members,
         attendance: attendance
       }))
-      .setMimeType(ContentService.MimeType.JSON)
-      .setHeaders(corsHeaders);
+      .setMimeType(ContentService.MimeType.JSON);
     }
     
     return ContentService.createTextOutput(JSON.stringify({
       status: "error",
       message: "未知的 action 動作"
     }))
-    .setMimeType(ContentService.MimeType.JSON)
-    .setHeaders(corsHeaders);
+    .setMimeType(ContentService.MimeType.JSON);
 
   } catch (error) {
     return ContentService.createTextOutput(JSON.stringify({
       status: "error",
       message: error.toString()
     }))
-    .setMimeType(ContentService.MimeType.JSON)
-    .setHeaders(corsHeaders);
+    .setMimeType(ContentService.MimeType.JSON);
   }
 }
 
 // 處理 POST 請求：用來寫入簽到、修改會員與確認收款
 function doPost(e) {
-  var corsHeaders = {
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type"
-  };
-
   try {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     initSheets(ss);
@@ -79,16 +64,14 @@ function doPost(e) {
       // 新增或更新社員
       saveMemberRow(ss, requestData.member);
       return ContentService.createTextOutput(JSON.stringify({ status: "success" }))
-        .setMimeType(ContentService.MimeType.JSON)
-        .setHeaders(corsHeaders);
+        .setMimeType(ContentService.MimeType.JSON);
     } 
     
     else if (action === "deleteMember") {
       // 刪除社員
       deleteMemberRow(ss, requestData.memberId);
       return ContentService.createTextOutput(JSON.stringify({ status: "success" }))
-        .setMimeType(ContentService.MimeType.JSON)
-        .setHeaders(corsHeaders);
+        .setMimeType(ContentService.MimeType.JSON);
     } 
     
     else if (action === "checkin") {
@@ -98,8 +81,7 @@ function doPost(e) {
       var result = handleCheckin(ss, date, studentId);
       
       return ContentService.createTextOutput(JSON.stringify(result))
-        .setMimeType(ContentService.MimeType.JSON)
-        .setHeaders(corsHeaders);
+        .setMimeType(ContentService.MimeType.JSON);
     } 
     
     else if (action === "confirmPayment") {
@@ -112,8 +94,7 @@ function doPost(e) {
       
       var result = handleConfirmPayment(ss, date, memberId, receiptNo, amount, itemDesc);
       return ContentService.createTextOutput(JSON.stringify(result))
-        .setMimeType(ContentService.MimeType.JSON)
-        .setHeaders(corsHeaders);
+        .setMimeType(ContentService.MimeType.JSON);
     }
 
     else if (action === "confirmUnlimitedPayment") {
@@ -126,36 +107,23 @@ function doPost(e) {
 
       var result = handleConfirmUnlimitedPayment(ss, memberId, receiptNo, amount, itemDesc, date);
       return ContentService.createTextOutput(JSON.stringify(result))
-        .setMimeType(ContentService.MimeType.JSON)
-        .setHeaders(corsHeaders);
+        .setMimeType(ContentService.MimeType.JSON);
     }
 
     // 預設做整份資料同步
     else if (action === "syncAll") {
       syncDatabase(ss, requestData.members, requestData.attendance);
       return ContentService.createTextOutput(JSON.stringify({ status: "success" }))
-        .setMimeType(ContentService.MimeType.JSON)
-        .setHeaders(corsHeaders);
+        .setMimeType(ContentService.MimeType.JSON);
     }
 
     return ContentService.createTextOutput(JSON.stringify({ status: "error", message: "無匹配動作" }))
-      .setMimeType(ContentService.MimeType.JSON)
-      .setHeaders(corsHeaders);
+      .setMimeType(ContentService.MimeType.JSON);
 
   } catch (error) {
     return ContentService.createTextOutput(JSON.stringify({ status: "error", message: error.toString() }))
-      .setMimeType(ContentService.MimeType.JSON)
-      .setHeaders(corsHeaders);
+      .setMimeType(ContentService.MimeType.JSON);
   }
-}
-
-function doOptions(e) {
-  var corsHeaders = {
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type"
-  };
-  return ContentService.createTextOutput("CORS OK").setHeaders(corsHeaders);
 }
 
 // ---------------- 內部邏輯與資料庫存取函數 ----------------
@@ -400,7 +368,6 @@ function handleConfirmUnlimitedPayment(ss, memberId, receiptNo, amount, itemDesc
 
 // 全體強制雙向同步（同步所有 Local 離線異動）
 function syncDatabase(ss, localMembers, localAttendance) {
-  // 此處簡化為覆蓋式寫入或增量寫入
   var mSheet = ss.getSheetByName("Members");
   mSheet.clearContents();
   mSheet.appendRow(["ID", "姓名", "學號", "方案類型", "上到飽是否已繳", "方案繳費日期", "方案收據編號"]);
@@ -415,7 +382,6 @@ function syncDatabase(ss, localMembers, localAttendance) {
     var dateData = localAttendance[date];
     Object.keys(dateData).forEach(function(mId) {
       var rec = dateData[mId];
-      // 尋找學生姓名與學號
       var member = localMembers.find(function(m) { return m.id === mId; });
       var name = member ? member.name : "未知";
       var sid = member ? member.phone : "";
