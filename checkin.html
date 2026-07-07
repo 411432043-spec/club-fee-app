@@ -384,6 +384,7 @@
     // Configuration
     let gasUrl = '';
     let members = [];
+    let attendance = {};
     let isMobile = false;
 
     // DOM Elements
@@ -434,6 +435,7 @@
       // Fallback: Read LocalStorage first so it works offline/locally without GAS
       const localMembers = JSON.parse(localStorage.getItem('club_members')) || [];
       members = localMembers;
+      attendance = JSON.parse(localStorage.getItem('club_attendance')) || {};
 
       if (!gasUrl) {
         updateCloudStatus('offline', '本地單機模式 (未同步試算表)');
@@ -448,8 +450,10 @@
         
         if (result.status === 'success') {
           members = result.members || [];
+          attendance = result.attendance || {};
           // Keep local storage up to date
           localStorage.setItem('club_members', JSON.stringify(members));
+          localStorage.setItem('club_attendance', JSON.stringify(attendance));
           updateCloudStatus('connected', '雲端同步中 (已連線)');
           renderTabletList();
         } else {
@@ -493,9 +497,16 @@
           ? '<span style="color:#7e22ce; font-weight:600; font-size:0.8rem;">[上到飽方案]</span>' 
           : '<span style="color:#4338ca; font-weight:600; font-size:0.8rem;">[單堂方案]</span>';
 
+        // Calculate trial order index
+        const totalAttCount = getTotalAttendanceCount(m.id);
+        let statusBadge = '';
+        if (totalAttCount < 3) {
+          statusBadge = ` <span style="background:#fef3c7; color:#d97706; padding:2px 6px; border-radius:4px; font-size:0.75rem; font-weight:600;">試上中 (${totalAttCount}/3)</span>`;
+        }
+
         li.innerHTML = `
           <div>
-            <div class="member-name">${m.name}</div>
+            <div class="member-name">${m.name}${statusBadge}</div>
             <div class="member-sub">學號：${m.phone} | ${planText}</div>
           </div>
           <button class="btn btn-primary" onclick="performCheckin('${m.phone}')">
@@ -507,9 +518,19 @@
       lucide.createIcons();
     }
 
+    // Helper: count attendance count
+    function getTotalAttendanceCount(memberId) {
+      let count = 0;
+      Object.keys(attendance).forEach(d => {
+        if (attendance[d] && attendance[d][memberId] && attendance[d][memberId].present) {
+          count++;
+        }
+      });
+      return count;
+    }
+
     // Perform Checkin request
     async function performCheckin(studentId) {
-      // Find member locally first to show immediate popup
       const member = members.find(m => m.phone === studentId || m.name === studentId);
       
       if (!member) {
@@ -521,14 +542,13 @@
       btnSubmitMobile.disabled = true;
       const today = new Date().toLocaleDateString('zh-TW', { timeZone: 'Asia/Taipei', year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '-');
 
-      // Local Fallback writing: Make sure offline check-in works and updates LocalStorage!
+      // Local Fallback writing
       try {
         let localAttendance = JSON.parse(localStorage.getItem('club_attendance')) || {};
         if (!localAttendance[today]) {
           localAttendance[today] = {};
         }
         
-        // Mark checked in locally
         const isUnlimitedPaid = member.plan === 'unlimited' && member.unlimitedPaid;
         localAttendance[today][member.id] = {
           present: true,
@@ -536,23 +556,35 @@
           receiptNo: isUnlimitedPaid ? member.unlimitedReceiptNo : ""
         };
         localStorage.setItem('club_attendance', JSON.stringify(localAttendance));
+        attendance = localAttendance; // Update cache
       } catch (err) {
-        console.error("Local attendance save error:", err);
+        console.error("Local save error:", err);
       }
+
+      // Calculate how many times this student has checked in (including today)
+      const trialCheckinIndex = getTotalAttendanceCount(member.id);
 
       // Prepare UI Success card details
       successName.textContent = member.name;
-      if (member.plan === 'unlimited') {
-        if (member.unlimitedPaid) {
-          successNotice.className = 'fee-notice paid';
-          successNotice.textContent = '您是上到飽方案（已付清），此堂課免繳費！祝上課愉快。';
+      
+      if (trialCheckinIndex <= 3) {
+        // Free trial notification!
+        successNotice.className = 'fee-notice paid';
+        successNotice.textContent = `這是您第 ${trialCheckinIndex} 次出席上課（前 3 次免費試上），此堂課免繳費！祝上課愉快！`;
+      } else {
+        // Normal billing notification
+        if (member.plan === 'unlimited') {
+          if (member.unlimitedPaid) {
+            successNotice.className = 'fee-notice paid';
+            successNotice.textContent = '您是上到飽方案（已付清），此堂課免繳費！祝上課愉快。';
+          } else {
+            successNotice.className = 'fee-notice unpaid';
+            successNotice.textContent = `您已使用完 3 次免費試上額度（目前第 ${trialCheckinIndex} 次出席），請向幹部補繳 $1000 元方案費。`;
+          }
         } else {
           successNotice.className = 'fee-notice unpaid';
-          successNotice.textContent = '提醒您：您選擇了「上到飽方案」，請向幹部補繳 $1000 元方案費。';
+          successNotice.textContent = `您已使用完 3 次免費試上額度（目前第 ${trialCheckinIndex} 次出席），單堂社費 $50 元，請向幹部付款並領取收據。`;
         }
-      } else {
-        successNotice.className = 'fee-notice unpaid';
-        successNotice.textContent = '單堂社費 $50 元，請向幹部付款並領取收據。';
       }
       successOverlay.classList.remove('hidden');
 

@@ -156,6 +156,27 @@ function getAttendanceData(date) {
   return attendance[date];
 }
 
+// Helper: Get chronological order index of a member's check-in for a given date (1-indexed)
+function getAttendanceOrderIndex(memberId, date) {
+  const dates = Object.keys(attendance).filter(d => {
+    return attendance[d] && attendance[d][memberId] && attendance[d][memberId].present;
+  });
+  dates.sort();
+  const index = dates.indexOf(date);
+  return index !== -1 ? index + 1 : 1;
+}
+
+// Helper: Get total attendance count of a member across all dates
+function getTotalAttendanceCount(memberId) {
+  let count = 0;
+  Object.keys(attendance).forEach(d => {
+    if (attendance[d] && attendance[d][memberId] && attendance[d][memberId].present) {
+      count++;
+    }
+  });
+  return count;
+}
+
 // Save GAS cloud configuration
 function handleSaveGas() {
   const urlVal = inputGasUrl.value.trim();
@@ -178,7 +199,6 @@ async function fetchCloudData(silent = false) {
     const result = await response.json();
     
     if (result.status === 'success') {
-      // Overwrite local cache with Google Sheet central data
       members = result.members || [];
       attendance = result.attendance || {};
       saveState();
@@ -232,10 +252,7 @@ function openQrModal() {
   
   // Handle local file testing folder fallback
   if (baseFolder.startsWith('file:///')) {
-    // If running offline locally, students cannot open 'file://' on their own phones,
-    // but we can generate a hosted fallback URL pointing to a public template page, 
-    // or just let it construct the local path for developers.
-    baseFolder = 'https://yenti_9n4pw01.github.io/club-fee-app'; // mock deployment URL
+    baseFolder = 'https://411432043-spec.github.io/club-fee-app'; // production URL
   }
   
   const checkinUrl = `${baseFolder}/checkin.html?gas=${encodeURIComponent(gasUrl)}&mode=mobile`;
@@ -282,8 +299,12 @@ function renderStats() {
     const record = dateData[member.id];
     if (record && record.present) {
       checkedInCount++;
+      // Only count as received if it was paid AND is NOT a free trial class (order > 3)
       if (member.plan === 'single' && record.paid) {
-        receivedAmount += SINGLE_FEE_AMOUNT;
+        const orderIdx = getAttendanceOrderIndex(member.id, date);
+        if (orderIdx >= 4) {
+          receivedAmount += SINGLE_FEE_AMOUNT;
+        }
       }
     }
     // B: Unlimited plan subscription payments made on this date
@@ -293,18 +314,24 @@ function renderStats() {
   });
 
   // 2. Calculate pending amount
-  // A: Unpaid class fees for single-plan checked-in members today
+  // A: Unpaid class fees for single-plan checked-in members today (exclude trial class)
   members.forEach(member => {
     const record = dateData[member.id];
     if (record && record.present && member.plan === 'single' && !record.paid) {
-      pendingAmount += SINGLE_FEE_AMOUNT;
+      const orderIdx = getAttendanceOrderIndex(member.id, date);
+      if (orderIdx >= 4) {
+        pendingAmount += SINGLE_FEE_AMOUNT;
+      }
     }
   });
 
-  // B: Unpaid subscription fees for unlimited plan members (outstanding total)
+  // B: Unpaid subscription fees for unlimited plan members (only if they have completed their 3 trial classes!)
   members.forEach(member => {
     if (member.plan === 'unlimited' && !member.unlimitedPaid) {
-      pendingAmount += UNLIMITED_FEE_AMOUNT;
+      const totalAttCount = getTotalAttendanceCount(member.id);
+      if (totalAttCount >= 4) {
+        pendingAmount += UNLIMITED_FEE_AMOUNT;
+      }
     }
   });
 
@@ -324,38 +351,44 @@ function renderUnpaidList() {
   unpaidList.innerHTML = '';
   let unpaidRecords = [];
 
-  // 1. Find all unpaid subscription plans ($1000)
+  // 1. Find all unpaid subscription plans ($1000) - only for those who completed their 3 trial classes!
   members.forEach(member => {
     if (member.plan === 'unlimited' && !member.unlimitedPaid) {
-      unpaidRecords.push({
-        type: 'unlimited',
-        memberId: member.id,
-        memberName: member.name,
-        memberPhone: member.phone || '無資料',
-        amount: UNLIMITED_FEE_AMOUNT,
-        desc: '上到飽方案費'
-      });
+      const totalAttCount = getTotalAttendanceCount(member.id);
+      if (totalAttCount >= 4) {
+        unpaidRecords.push({
+          type: 'unlimited',
+          memberId: member.id,
+          memberName: member.name,
+          memberPhone: member.phone || '無資料',
+          amount: UNLIMITED_FEE_AMOUNT,
+          desc: `已試上 ${totalAttCount} 次，需繳方案費`
+        });
+      }
     }
   });
 
-  // 2. Scan all dates in history for unpaid class check-ins ($50) for single plan members
+  // 2. Scan all dates in history for unpaid class check-ins ($50) for single plan members - excluding trials!
   Object.keys(attendance).forEach(date => {
     const dateData = attendance[date];
     Object.keys(dateData).forEach(memberId => {
       const record = dateData[memberId];
       if (record.present && !record.paid) {
         const member = members.find(m => m.id === memberId);
-        // Only trigger class unpaid if they are single plan (unlimited plan uses subscription)
+        // Only trigger class unpaid if they are single plan AND it is their 4th class or later
         if (member && member.plan === 'single') {
-          unpaidRecords.push({
-            type: 'single',
-            date: date,
-            memberId: member.id,
-            memberName: member.name,
-            memberPhone: member.phone || '無資料',
-            amount: SINGLE_FEE_AMOUNT,
-            desc: `${date} 堂課費`
-          });
+          const orderIdx = getAttendanceOrderIndex(member.id, date);
+          if (orderIdx >= 4) {
+            unpaidRecords.push({
+              type: 'single',
+              date: date,
+              memberId: member.id,
+              memberName: member.name,
+              memberPhone: member.phone || '無資料',
+              amount: SINGLE_FEE_AMOUNT,
+              desc: `第 ${orderIdx} 堂課 (試上已滿)`
+            });
+          }
         }
       }
     });
@@ -376,7 +409,7 @@ function renderUnpaidList() {
       li.innerHTML = `
         <div class="unpaid-item-info">
           <span class="unpaid-item-name">${rec.memberName} <span class="badge badge-purple">上到飽</span></span>
-          <span class="unpaid-item-date" style="color:var(--danger-color); font-weight:500;">未付方案年費 $${rec.amount} 元</span>
+          <span class="unpaid-item-date" style="color:var(--danger-color); font-weight:500;">${rec.desc} $${rec.amount} 元</span>
         </div>
         <button class="btn btn-success btn-sm" onclick="confirmUnlimitedPayment('${rec.memberId}')">
           <i data-lucide="check"></i> 收款 1000 元
@@ -434,49 +467,63 @@ function renderAttendanceTable() {
     let actionButtons = '';
 
     if (record.present) {
-      if (member.plan === 'unlimited') {
-        if (member.unlimitedPaid) {
-          paymentBadge = `<span class="badge badge-success">方案內免繳</span>`;
-          actionButtons = `
-            <button class="btn btn-secondary btn-sm" onclick="showUnlimitedReceiptModal('${member.id}')">
-              <i data-lucide="file-text"></i> 方案收據
-            </button>
-            <button class="btn btn-outline btn-sm btn-icon" title="取消簽到" onclick="toggleAttendance('${member.id}')">
-              <i data-lucide="x"></i>
-            </button>
-          `;
-        } else {
-          paymentBadge = `<span class="badge badge-danger">未繳方案費</span>`;
-          actionButtons = `
-            <button class="btn btn-success btn-sm" onclick="confirmUnlimitedPayment('${member.id}')">
-              <i data-lucide="dollar-sign"></i> 收方案費 1000 元
-            </button>
-            <button class="btn btn-outline btn-sm btn-icon" title="取消簽到" onclick="toggleAttendance('${member.id}')">
-              <i data-lucide="x"></i>
-            </button>
-          `;
-        }
-      } else { // Single Plan
-        if (record.paid) {
-          paymentBadge = `<span class="badge badge-success">已繳 $${SINGLE_FEE_AMOUNT}</span>`;
-          actionButtons = `
-            <button class="btn btn-secondary btn-sm" onclick="showReceiptModal('${date}', '${member.id}')">
-              <i data-lucide="file-text"></i> 收據
-            </button>
-            <button class="btn btn-outline btn-sm btn-icon" title="取消簽到" onclick="toggleAttendance('${member.id}')">
-              <i data-lucide="x"></i>
-            </button>
-          `;
-        } else {
-          paymentBadge = `<span class="badge badge-warning">未繳費</span>`;
-          actionButtons = `
-            <button class="btn btn-success btn-sm" onclick="confirmPayment('${date}', '${member.id}')">
-              <i data-lucide="dollar-sign"></i> 收款 50 元
-            </button>
-            <button class="btn btn-outline btn-sm btn-icon" title="取消簽到" onclick="toggleAttendance('${member.id}')">
-              <i data-lucide="x"></i>
-            </button>
-          `;
+      const orderIdx = getAttendanceOrderIndex(member.id, date);
+      
+      // If it is within the 3 free trial classes
+      if (orderIdx <= 3) {
+        paymentBadge = `<span class="badge badge-success">試上免繳 (${orderIdx}/3)</span>`;
+        actionButtons = `
+          <button class="btn btn-outline btn-sm btn-icon" title="取消簽到" onclick="toggleAttendance('${member.id}')">
+            <i data-lucide="x"></i>
+          </button>
+        `;
+      } 
+      // If trial is over and normal billing applies
+      else {
+        if (member.plan === 'unlimited') {
+          if (member.unlimitedPaid) {
+            paymentBadge = `<span class="badge badge-success">方案內免繳</span>`;
+            actionButtons = `
+              <button class="btn btn-secondary btn-sm" onclick="showUnlimitedReceiptModal('${member.id}')">
+                <i data-lucide="file-text"></i> 方案收據
+              </button>
+              <button class="btn btn-outline btn-sm btn-icon" title="取消簽到" onclick="toggleAttendance('${member.id}')">
+                <i data-lucide="x"></i>
+              </button>
+            `;
+          } else {
+            paymentBadge = `<span class="badge badge-danger">未繳方案費</span>`;
+            actionButtons = `
+              <button class="btn btn-success btn-sm" onclick="confirmUnlimitedPayment('${member.id}')">
+                <i data-lucide="dollar-sign"></i> 收方案費 1000 元
+              </button>
+              <button class="btn btn-outline btn-sm btn-icon" title="取消簽到" onclick="toggleAttendance('${member.id}')">
+                <i data-lucide="x"></i>
+              </button>
+            `;
+          }
+        } else { // Single Plan
+          if (record.paid) {
+            paymentBadge = `<span class="badge badge-success">已繳 $${SINGLE_FEE_AMOUNT}</span>`;
+            actionButtons = `
+              <button class="btn btn-secondary btn-sm" onclick="showReceiptModal('${date}', '${member.id}')">
+                <i data-lucide="file-text"></i> 收據
+              </button>
+              <button class="btn btn-outline btn-sm btn-icon" title="取消簽到" onclick="toggleAttendance('${member.id}')">
+                <i data-lucide="x"></i>
+              </button>
+            `;
+          } else {
+            paymentBadge = `<span class="badge badge-warning">未繳費</span>`;
+            actionButtons = `
+              <button class="btn btn-success btn-sm" onclick="confirmPayment('${date}', '${member.id}')">
+                <i data-lucide="dollar-sign"></i> 收款 50 元
+              </button>
+              <button class="btn btn-outline btn-sm btn-icon" title="取消簽到" onclick="toggleAttendance('${member.id}')">
+                <i data-lucide="x"></i>
+              </button>
+            `;
+          }
         }
       }
     } else {
@@ -508,7 +555,6 @@ function renderAttendanceTable() {
 }
 
 // Render Member Settings List (Right Panel)
-// Update to show Student ID (學號) instead of phone
 function renderMemberList() {
   memberList.innerHTML = '';
   if (members.length === 0) {
@@ -523,19 +569,29 @@ function renderMemberList() {
     // Status text for unlimited plans
     let statusText = '';
     let payBtn = '';
+    const totalAttCount = getTotalAttendanceCount(member.id);
+
     if (member.plan === 'unlimited') {
       if (member.unlimitedPaid) {
         statusText = ` <span class="badge badge-success">上到飽 (已付)</span>`;
       } else {
-        statusText = ` <span class="badge badge-danger">上到飽 (未付)</span>`;
-        payBtn = `
-          <button class="btn btn-success btn-sm" style="padding:4px 8px; font-size:0.8rem;" onclick="confirmUnlimitedPayment('${member.id}')">
-            收1000
-          </button>
-        `;
+        if (totalAttCount <= 3) {
+          statusText = ` <span class="badge badge-warning">試上期 (${totalAttCount}/3)</span>`;
+        } else {
+          statusText = ` <span class="badge badge-danger">上到飽 (未付)</span>`;
+          payBtn = `
+            <button class="btn btn-success btn-sm" style="padding:4px 8px; font-size:0.8rem;" onclick="confirmUnlimitedPayment('${member.id}')">
+              收1000
+            </button>
+          `;
+        }
       }
     } else {
-      statusText = ` <span class="badge badge-indigo">單堂繳費</span>`;
+      if (totalAttCount <= 3) {
+        statusText = ` <span class="badge badge-warning">試上期 (${totalAttCount}/3)</span>`;
+      } else {
+        statusText = ` <span class="badge badge-indigo">單堂繳費</span>`;
+      }
     }
 
     li.innerHTML = `
@@ -543,7 +599,7 @@ function renderMemberList() {
         <div style="display:flex; align-items:center; gap:6px;">
           <strong>${member.name}</strong> ${statusText}
         </div>
-        <div class="member-info-sub">學號：${member.phone || '未填寫'}</div>
+        <div class="member-info-sub">學號：${member.phone || '未填寫'} | 已出席 ${totalAttCount} 次</div>
       </div>
       <div style="display:flex; gap:6px; align-items:center;">
         ${payBtn}
@@ -1099,8 +1155,11 @@ function exportToCSV() {
       const record = dateData[memberId];
       const member = members.find(m => m.id === memberId);
       if (record.present && record.paid && member && member.plan === 'single') {
-        hasData = true;
-        csvContent += `"${date}","${record.receiptNo || ''}","${member.name}","${member.phone || ''}","單堂活動社費","單堂 $50",${SINGLE_FEE_AMOUNT}\n`;
+        const orderIdx = getAttendanceOrderIndex(member.id, date);
+        if (orderIdx >= 4) {
+          hasData = true;
+          csvContent += `"${date}","${record.receiptNo || ''}","${member.name}","${member.phone || ''}","單堂活動社費","單堂 $50",${SINGLE_FEE_AMOUNT}\n`;
+        }
       }
     });
   });
