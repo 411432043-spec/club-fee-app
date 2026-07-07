@@ -482,7 +482,7 @@
 
       memberList.innerHTML = '';
       const q = tabletSearch.value.toLowerCase().trim();
-      const filtered = members.filter(m => m.name.toLowerCase().includes(q) || m.phone.toLowerCase().includes(q));
+      const filtered = members.filter(m => String(m.name || '').toLowerCase().includes(q) || String(m.phone || '').toLowerCase().includes(q));
 
       if (filtered.length === 0) {
         memberList.innerHTML = '<li class="empty-state">找不到符合的社員。</li>';

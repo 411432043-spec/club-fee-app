@@ -436,7 +436,7 @@ function renderAttendanceTable() {
   const dateData = getAttendanceData(date);
   const searchQ = memberSearch.value.toLowerCase().trim();
 
-  const filteredMembers = members.filter(m => m.name.toLowerCase().includes(searchQ));
+  const filteredMembers = members.filter(m => String(m.name || '').toLowerCase().includes(searchQ));
 
   if (filteredMembers.length === 0) {
     attendanceTableBody.innerHTML = `
