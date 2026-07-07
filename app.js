@@ -205,11 +205,11 @@ async function fetchCloudData(silent = false) {
       render();
       updateSyncIndicator('connected', '雲端同步中 (已連線)');
     } else {
-      updateSyncIndicator('error', '雲端同步失敗');
+      updateSyncIndicator('error', '失敗: ' + result.message);
     }
   } catch (err) {
     console.error("Cloud fetch failed:", err);
-    updateSyncIndicator('error', '雲端連線失敗');
+    updateSyncIndicator('error', '連線失敗: ' + err.message);
   }
 }
 
@@ -299,7 +299,6 @@ function renderStats() {
     const record = dateData[member.id];
     if (record && record.present) {
       checkedInCount++;
-      // Only count as received if it was paid AND is NOT a free trial class (order > 3)
       if (member.plan === 'single' && record.paid) {
         const orderIdx = getAttendanceOrderIndex(member.id, date);
         if (orderIdx >= 4) {
@@ -375,7 +374,6 @@ function renderUnpaidList() {
       const record = dateData[memberId];
       if (record.present && !record.paid) {
         const member = members.find(m => m.id === memberId);
-        // Only trigger class unpaid if they are single plan AND it is their 4th class or later
         if (member && member.plan === 'single') {
           const orderIdx = getAttendanceOrderIndex(member.id, date);
           if (orderIdx >= 4) {
@@ -443,7 +441,7 @@ function renderAttendanceTable() {
   if (filteredMembers.length === 0) {
     attendanceTableBody.innerHTML = `
       <tr>
-        <td colspan="4" class="empty-state">沒有找到符合搜尋條件的社員。</td>
+        <td colspan="4" class="empty-state">沒有找到符合搜尋條件 of 社員。</td>
       </tr>
     `;
     return;
@@ -453,12 +451,10 @@ function renderAttendanceTable() {
     const record = dateData[member.id] || { present: false, paid: false };
     const tr = document.createElement('tr');
     
-    // Plan badge HTML
     const planBadge = member.plan === 'unlimited' 
       ? '<span class="badge badge-purple" style="margin-left: 5px;">上到飽</span>' 
       : '<span class="badge badge-indigo" style="margin-left: 5px;">單堂</span>';
 
-    // Status Badge & Action buttons
     let presentBadge = record.present 
       ? '<span class="badge badge-success">已簽到</span>' 
       : '<span class="badge badge-outline">未簽到</span>';
@@ -469,7 +465,6 @@ function renderAttendanceTable() {
     if (record.present) {
       const orderIdx = getAttendanceOrderIndex(member.id, date);
       
-      // If it is within the 3 free trial classes
       if (orderIdx <= 3) {
         paymentBadge = `<span class="badge badge-success">試上免繳 (${orderIdx}/3)</span>`;
         actionButtons = `
@@ -478,7 +473,6 @@ function renderAttendanceTable() {
           </button>
         `;
       } 
-      // If trial is over and normal billing applies
       else {
         if (member.plan === 'unlimited') {
           if (member.unlimitedPaid) {
@@ -566,7 +560,6 @@ function renderMemberList() {
     const li = document.createElement('li');
     li.className = 'member-compact-item';
     
-    // Status text for unlimited plans
     let statusText = '';
     let payBtn = '';
     const totalAttCount = getTotalAttendanceCount(member.id);
@@ -625,7 +618,6 @@ window.toggleAttendance = function(memberId) {
 
   dateData[memberId].present = !dateData[memberId].present;
   
-  // If user is unchecked, clear payment status as well
   if (!dateData[memberId].present) {
     dateData[memberId].paid = false;
     dateData[memberId].receiptNo = '';
@@ -634,7 +626,6 @@ window.toggleAttendance = function(memberId) {
   saveState();
   render();
 
-  // Sync to Cloud
   if (member) {
     postToCloud('checkin', {
       date: date,
@@ -654,7 +645,6 @@ function handleCheckAll() {
     }
     dateData[member.id].present = true;
     
-    // Sync each to cloud in background
     postToCloud('checkin', {
       date: date,
       studentId: member.phone
@@ -671,7 +661,6 @@ window.confirmPayment = function(date, memberId) {
   const member = members.find(m => m.id === memberId);
   if (!dateData || !dateData[memberId] || !member) return;
 
-  // Generate Receipt ID
   const todayCompact = date.replace(/-/g, '');
   const serial = String(receiptIndex).padStart(4, '0');
   const receiptNo = `REC-${todayCompact}-${serial}`;
@@ -683,7 +672,6 @@ window.confirmPayment = function(date, memberId) {
   saveState();
   render();
   
-  // Trigger cloud sync/auto email
   postToCloud('confirmPayment', {
     date: date,
     memberId: memberId,
@@ -692,7 +680,6 @@ window.confirmPayment = function(date, memberId) {
     itemDesc: `單堂活動社費 (日期: ${date})`
   });
 
-  // Open Receipt Modal
   showReceiptModal(date, memberId);
 };
 
@@ -714,7 +701,6 @@ window.confirmUnlimitedPayment = function(memberId) {
   saveState();
   render();
 
-  // Trigger cloud sync/auto email
   postToCloud('confirmUnlimitedPayment', {
     date: today,
     memberId: memberId,
@@ -723,7 +709,6 @@ window.confirmUnlimitedPayment = function(memberId) {
     itemDesc: '包期上到飽方案費'
   });
 
-  // Open Receipt Modal
   showUnlimitedReceiptModal(memberId);
 };
 
@@ -731,18 +716,17 @@ window.confirmUnlimitedPayment = function(memberId) {
 function handleAddMember(e) {
   e.preventDefault();
   const name = newMemberName.value.trim();
-  const phone = newMemberPhone.value.trim(); // contains Student ID
-  const plan = newMemberPlan.value; // 'single' or 'unlimited'
+  const phone = newMemberPhone.value.trim();
+  const plan = newMemberPlan.value;
 
   if (!name) return;
 
-  // Unique ID
   const id = 'mem_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
 
   const newMember = {
     id,
     name,
-    phone, // Student ID
+    phone,
     plan,
     unlimitedPaid: false,
     unlimitedPaidDate: '',
@@ -752,13 +736,11 @@ function handleAddMember(e) {
   members.push(newMember);
   saveState();
   
-  // Reset Form & Render
   newMemberName.value = '';
   newMemberPhone.value = '';
   newMemberPlan.value = 'single';
   render();
 
-  // Sync Member to Google sheet
   postToCloud('saveMember', { member: newMember });
 }
 
@@ -770,7 +752,6 @@ window.deleteMember = function(memberId) {
   saveState();
   render();
 
-  // Sync deletion to cloud
   postToCloud('deleteMember', { memberId: memberId });
 };
 
@@ -826,7 +807,7 @@ function drawCurvedText(ctx, text, centerX, centerY, radius, startAngle, endAngl
   const angleStep = angleRange / (characters.length - 1 || 1);
   
   ctx.save();
-  ctx.fillStyle = 'rgba(163, 0, 0, 0.9)'; // Dark Red ink color
+  ctx.fillStyle = 'rgba(163, 0, 0, 0.9)';
   ctx.font = 'bold 11px "Noto Sans TC", sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
@@ -846,29 +827,24 @@ function drawCurvedText(ctx, text, centerX, centerY, radius, startAngle, endAngl
 function drawReceipt(date, memberName, receiptNo, amount, itemDesc) {
   const ctx = receiptCanvas.getContext('2d');
   
-  // Traditional Blue color theme
   const blueColor = '#0f3b68';
-  const stampRed = 'rgba(163, 0, 0, 0.9)'; // Dark Red ink
-  const bgCream = '#fbfcf7'; // soft paper background
+  const stampRed = 'rgba(163, 0, 0, 0.9)';
+  const bgCream = '#fbfcf7';
 
-  // 1. Draw Paper Background
   ctx.fillStyle = bgCream;
   ctx.fillRect(0, 0, receiptCanvas.width, receiptCanvas.height);
 
-  // Outer Border (Double Frame style)
   ctx.strokeStyle = blueColor;
   ctx.lineWidth = 4;
   ctx.strokeRect(15, 15, receiptCanvas.width - 30, receiptCanvas.height - 30);
   ctx.lineWidth = 1;
   ctx.strokeRect(20, 20, receiptCanvas.width - 40, receiptCanvas.height - 40);
 
-  // 2. Draw Header "免用統一發票收據"
   ctx.fillStyle = blueColor;
   ctx.font = 'bold 32px "Noto Sans TC", sans-serif';
   ctx.textAlign = 'center';
   ctx.fillText('免用統一發票收據', receiptCanvas.width / 2, 60);
   
-  // Header Double Underline
   ctx.beginPath();
   ctx.moveTo(receiptCanvas.width / 2 - 140, 72);
   ctx.lineTo(receiptCanvas.width / 2 + 140, 72);
@@ -878,7 +854,6 @@ function drawReceipt(date, memberName, receiptNo, amount, itemDesc) {
   ctx.lineWidth = 2;
   ctx.stroke();
 
-  // 3. Draw Date (中華民國 年 月 日)
   let rocYear = '';
   let monthStr = '';
   let dayStr = '';
@@ -896,15 +871,12 @@ function drawReceipt(date, memberName, receiptNo, amount, itemDesc) {
   ctx.textAlign = 'right';
   ctx.fillText(`中華民國  ${rocYear}  年  ${monthStr}  月  ${dayStr}  日`, receiptCanvas.width - 45, 60);
 
-  // 4. Draw Unified Business Number (統一編號: 預設帶有 03395880, 直接印文字不畫格子)
   ctx.fillText(`統一編號：${DEFAULT_TAX_ID}`, receiptCanvas.width - 45, 95);
 
-  // 5. Draw Client Name & Address (台照 / 預設帶有花蓮東華大學地址)
   ctx.textAlign = 'left';
   ctx.font = 'bold 18px "Noto Sans TC", sans-serif';
   ctx.fillText(`${memberName}   台照`, 45, 110);
   
-  // Underline for name
   ctx.beginPath();
   ctx.moveTo(40, 120);
   ctx.lineTo(340, 120);
@@ -913,46 +885,39 @@ function drawReceipt(date, memberName, receiptNo, amount, itemDesc) {
   ctx.font = '14px "Noto Sans TC", sans-serif';
   ctx.fillText('地址：', 45, 142);
   
-  // Draw default address text
   ctx.save();
   ctx.font = '10.5px "Noto Sans TC", sans-serif';
   ctx.fillText(DEFAULT_ADDRESS, 88, 142);
   ctx.restore();
 
-  // Underline for address
   ctx.beginPath();
   ctx.moveTo(85, 148);
   ctx.lineTo(340, 148);
   ctx.stroke();
 
-  // Draw Receipt Number on left side
   ctx.font = '12px "Inter", sans-serif';
   ctx.fillText(`No. ${receiptNo}`, 45, 80);
 
-  // 6. Draw main item grid table
   const tableX = 40;
   const tableY = 165;
-  const tableW = receiptCanvas.width - 80; // 670
+  const tableW = receiptCanvas.width - 80;
   const rowHeight = 35;
   const headerHeight = 35;
-  const tableRows = 4; // 4 data rows
+  const tableRows = 4;
 
-  // Draw Table Outer Bound
   ctx.lineWidth = 2;
   ctx.strokeRect(tableX, tableY, tableW, headerHeight + (rowHeight * tableRows));
   ctx.lineWidth = 1;
 
-  // Columns X coordinates (aligned to end at 710)
   const colX = {
-    desc: tableX,               // 品名摘要
-    qty: tableX + 280,          // 數量: 320
-    unitPrice: tableX + 370,    // 單價: 410
-    totalPrice: tableX + 470,   // 總價: 510
-    remark: tableX + 570,      // 備註: 610
-    end: tableX + tableW        // 結束: 710
+    desc: tableX,
+    qty: tableX + 280,
+    unitPrice: tableX + 370,
+    totalPrice: tableX + 470,
+    remark: tableX + 570,
+    end: tableX + tableW
   };
 
-  // Draw Vertical lines
   ctx.beginPath();
   ctx.moveTo(colX.qty, tableY); ctx.lineTo(colX.qty, tableY + headerHeight + (rowHeight * tableRows));
   ctx.moveTo(colX.unitPrice, tableY); ctx.lineTo(colX.unitPrice, tableY + headerHeight + (rowHeight * tableRows));
@@ -960,7 +925,6 @@ function drawReceipt(date, memberName, receiptNo, amount, itemDesc) {
   ctx.moveTo(colX.remark, tableY); ctx.lineTo(colX.remark, tableY + headerHeight + (rowHeight * tableRows));
   ctx.stroke();
 
-  // Draw Horizontal lines (header + 4 rows)
   ctx.beginPath();
   ctx.moveTo(tableX, tableY + headerHeight);
   ctx.lineTo(colX.end, tableY + headerHeight);
@@ -970,7 +934,6 @@ function drawReceipt(date, memberName, receiptNo, amount, itemDesc) {
   }
   ctx.stroke();
 
-  // Draw Headers text
   ctx.font = 'bold 15px "Noto Sans TC", sans-serif';
   ctx.textAlign = 'center';
   ctx.fillText('品   名   商   標   摘   要', (colX.desc + colX.qty) / 2, tableY + 23);
@@ -979,7 +942,6 @@ function drawReceipt(date, memberName, receiptNo, amount, itemDesc) {
   ctx.fillText('總 價', (colX.totalPrice + colX.remark) / 2, tableY + 23);
   ctx.fillText('備 註', (colX.remark + colX.end) / 2, tableY + 23);
 
-  // Draw Row 1 Data (Item details)
   ctx.font = '15px "Noto Sans TC", sans-serif';
   ctx.textAlign = 'left';
   ctx.fillText(`  ${itemDesc}`, colX.desc + 5, tableY + headerHeight + 23);
@@ -988,17 +950,14 @@ function drawReceipt(date, memberName, receiptNo, amount, itemDesc) {
   ctx.fillText('1', (colX.qty + colX.unitPrice) / 2, tableY + headerHeight + 23);
   ctx.fillText(amount.toString(), (colX.unitPrice + colX.totalPrice) / 2, tableY + headerHeight + 23);
   ctx.fillText(amount.toString(), (colX.totalPrice + colX.remark) / 2, tableY + headerHeight + 23);
-  ctx.fillText('', (colX.remark + colX.end) / 2, tableY + headerHeight + 23); // Remark column is kept empty
+  ctx.fillText('', (colX.remark + colX.end) / 2, tableY + headerHeight + 23);
 
-  // 7. Draw Bottom Section
-  const bottomY = tableY + headerHeight + (rowHeight * tableRows) + 15; // 355
+  const bottomY = tableY + headerHeight + (rowHeight * tableRows) + 15;
   
-  // A: 合計新台幣 Section
   ctx.textAlign = 'left';
   ctx.font = 'bold 16px "Noto Sans TC", sans-serif';
   ctx.fillText('合計新台幣：', tableX, bottomY + 35);
 
-  // Draw currency units table
   const currencyX = tableX + 105;
   const currencyW = 280;
   const currencyH = 50;
@@ -1006,26 +965,23 @@ function drawReceipt(date, memberName, receiptNo, amount, itemDesc) {
   ctx.strokeRect(currencyX, bottomY, currencyW, currencyH);
   
   const curCols = [
-    currencyX,              // Start
-    currencyX + 56,         // 萬
-    currencyX + 112,        // 仟
-    currencyX + 168,        // 佰
-    currencyX + 224,        // 拾
-    currencyX + 280         // 元整
+    currencyX,
+    currencyX + 56,
+    currencyX + 112,
+    currencyX + 168,
+    currencyX + 224,
+    currencyX + 280
   ];
 
   ctx.beginPath();
-  // Vertical splitters
   for(let i=1; i<5; i++) {
     ctx.moveTo(curCols[i], bottomY);
     ctx.lineTo(curCols[i], bottomY + currencyH);
   }
-  // Horizontal line separating unit names and digits
   ctx.moveTo(currencyX, bottomY + 22);
   ctx.lineTo(currencyX + currencyW, bottomY + 22);
   ctx.stroke();
 
-  // Unit Labels
   ctx.font = 'bold 11px "Noto Sans TC", sans-serif';
   ctx.textAlign = 'center';
   ctx.fillText('萬', (curCols[0] + curCols[1]) / 2, bottomY + 16);
@@ -1034,7 +990,6 @@ function drawReceipt(date, memberName, receiptNo, amount, itemDesc) {
   ctx.fillText('拾', (curCols[3] + curCols[4]) / 2, bottomY + 16);
   ctx.fillText('元整', (curCols[4] + curCols[5]) / 2, bottomY + 16);
 
-  // Unit Chinese digits values
   const cnDigits = getChineseCapitalDigits(amount);
   ctx.font = 'bold 16px "Noto Sans TC", sans-serif';
   ctx.fillStyle = blueColor;
@@ -1044,9 +999,8 @@ function drawReceipt(date, memberName, receiptNo, amount, itemDesc) {
   ctx.fillText(cnDigits.shi, (curCols[3] + curCols[4]) / 2, bottomY + 42);
   ctx.fillText(cnDigits.yuan, (curCols[4] + curCols[5]) / 2, bottomY + 42);
 
-  // B: 右側收據專用章 (Square stamp box - Aligns exactly to colX.end = 710 to fit paper size perfectly)
   const stampBoxW = 140; 
-  const stampBoxX = colX.end - stampBoxW; // Starts at 570, ends at 710
+  const stampBoxX = colX.end - stampBoxW;
   const stampBoxY = bottomY;
   const stampBoxH = 110;
   
@@ -1054,13 +1008,11 @@ function drawReceipt(date, memberName, receiptNo, amount, itemDesc) {
   ctx.lineWidth = 1.5;
   ctx.strokeRect(stampBoxX, stampBoxY, stampBoxW, stampBoxH);
   
-  // Header text inside stamp box
   ctx.fillStyle = blueColor;
   ctx.font = 'bold 12px "Noto Sans TC", sans-serif';
   ctx.textAlign = 'center';
   ctx.fillText('收 據 專 用 章', stampBoxX + (stampBoxW/2), stampBoxY + 18);
   
-  // Draw the custom circular stamp inside the stamp box
   const stampCX = stampBoxX + (stampBoxW/2);
   const stampCY = stampBoxY + 63;
   const stampRadius = 40;
@@ -1069,29 +1021,24 @@ function drawReceipt(date, memberName, receiptNo, amount, itemDesc) {
   ctx.lineWidth = 2.5;
   ctx.fillStyle = 'rgba(163, 0, 0, 0.03)';
   
-  // Draw outer stamp circle
   ctx.beginPath();
   ctx.arc(stampCX, stampCY, stampRadius, 0, Math.PI * 2);
   ctx.fill();
   ctx.stroke();
 
-  // Draw inner thin stamp circle
   ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.arc(stampCX, stampCY, stampRadius - 2.5, 0, Math.PI * 2);
   ctx.stroke();
 
-  // Draw curved top text: 東華休閒運動社
   drawCurvedText(ctx, '東華休閒運動社', stampCX, stampCY, stampRadius - 11, Math.PI * 1.15, Math.PI * 1.85);
 
-  // Draw center text: 線上收據專用章
   ctx.fillStyle = stampRed;
   ctx.font = 'bold 9.5px "Noto Sans TC", sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText('線上收據專用章', stampCX, stampCY + 2);
 
-  // Draw bottom text: 國立東華大學
   ctx.font = 'bold 9.5px "Noto Sans TC", sans-serif';
   ctx.fillText('國立東華大學', stampCX, stampCY + 18);
 
@@ -1101,7 +1048,6 @@ function drawReceipt(date, memberName, receiptNo, amount, itemDesc) {
       receiptCanvas.toBlob(async (blob) => {
         const file = new File([blob], `收據-${memberName}-${date}.png`, { type: 'image/png' });
         
-        // Check if Web Share API is available and can share files
         if (navigator.canShare && navigator.canShare({ files: [file] })) {
           await navigator.share({
             files: [file],
@@ -1109,12 +1055,10 @@ function drawReceipt(date, memberName, receiptNo, amount, itemDesc) {
             text: `這是您於 ${date} 的繳費電子收據，金額為 $${amount} 元。`
           });
         } else {
-          // Fallback: Copy summary to clipboard and download image
           const summaryText = `【東華休閒運動社 電子收據】\n收據編號：${receiptNo}\n繳費姓名：${memberName}\n收款項目：${itemDesc}\n實收金額：$${amount} TWD\n已收訖 (無統編收據專用章已蓋)`;
           await navigator.clipboard.writeText(summaryText);
           alert('您的瀏覽器/裝置不支援直接分享圖片。\n已自動下載收據圖片，並將收據文字資訊複製到剪貼簿。您可以直接貼上傳送給社員！');
           
-          // Trigger download automatically
           btnDownloadReceipt.click();
         }
       }, 'image/png');
@@ -1143,12 +1087,11 @@ function drawReceipt(date, memberName, receiptNo, amount, itemDesc) {
 
 // Backup logic: Export Excel-compatible CSV file
 function exportToCSV() {
-  let csvContent = '\uFEFF'; // UTF-8 BOM to prevent Excel display messy codes
+  let csvContent = '\uFEFF';
   csvContent += '收款日期,收據編號,社員姓名,學號,收費項目,收費方案,收款金額\n';
 
   let hasData = false;
 
-  // 1. Export single class receipts
   Object.keys(attendance).forEach(date => {
     const dateData = attendance[date];
     Object.keys(dateData).forEach(memberId => {
@@ -1164,7 +1107,6 @@ function exportToCSV() {
     });
   });
 
-  // 2. Export unlimited plan receipts
   members.forEach(member => {
     if (member.plan === 'unlimited' && member.unlimitedPaid) {
       hasData = true;
@@ -1228,7 +1170,7 @@ function importBackupJSON(e) {
     }
   };
   reader.readAsText(file);
-  e.target.value = ''; // Reset file input
+  e.target.value = '';
 }
 
 // Clear all app data
