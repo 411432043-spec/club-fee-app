@@ -403,7 +403,7 @@
 
     // Parse URL Query parameters
     const urlParams = new URLSearchParams(window.location.search);
-    gasUrl = urlParams.get('gas') || localStorage.getItem('club_gas_url') || '';
+    gasUrl = urlParams.get('gas') || localStorage.getItem('club_gas_url') || 'https://script.google.com/macros/s/AKfycbwc3sd4N08G9K0dyMLSWTGX24HoeCN4E_KyS3uC5RTSZYgKnmlojxWeuLb6TQGL6ESJ/exec';
     const mode = urlParams.get('mode');
     if (mode === 'mobile') {
       isMobile = true;

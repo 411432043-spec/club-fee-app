@@ -8,7 +8,7 @@ const STORAGE_KEY_GAS_URL = 'club_gas_url';
 let members = JSON.parse(localStorage.getItem(STORAGE_KEY_MEMBERS)) || [];
 let attendance = JSON.parse(localStorage.getItem(STORAGE_KEY_ATTENDANCE)) || {};
 let receiptIndex = parseInt(localStorage.getItem(STORAGE_KEY_RECEIPT_INDEX)) || 1;
-let gasUrl = localStorage.getItem(STORAGE_KEY_GAS_URL) || '';
+let gasUrl = localStorage.getItem(STORAGE_KEY_GAS_URL) || 'https://script.google.com/macros/s/AKfycbwc3sd4N08G9K0dyMLSWTGX24HoeCN4E_KyS3uC5RTSZYgKnmlojxWeuLb6TQGL6ESJ/exec';
 
 // DOM Elements
 const dateInput = document.getElementById('class-date');
